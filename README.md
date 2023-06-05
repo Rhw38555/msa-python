@@ -22,5 +22,5 @@
 3. 상품 서비스 
 
 ## 기타 
-사용 언어 : python
-사용 기술 : flask, sqlalchemy, mongodb, postgres, kafka
+사용 언어 : python  
+사용 기술 : flask, sqlalchemy, mongodb, postgres, kafka  
