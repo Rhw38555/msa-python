@@ -1,0 +1,137 @@
+version: "3"
+services:
+  # Database
+  postgres-user:
+    build:
+      context: .
+      dockerfile: postgres-user/postgres-user.Dockerfile
+    environment:
+      POSTGRES_PASSWORD: cqrs-assignment
+    image: cqrs-assignment/postgres-user
+    ports:
+      - "35432:5432"
+
+  postgres-alarm:
+    build:
+      context: .
+      dockerfile: postgres-alarm/postgres-alarm.Dockerfile
+    environment:
+      POSTGRES_PASSWORD: cqrs-assignment
+    image: cqrs-assignment/postgres-alarm
+    ports:
+      - "35433:5432"
+
+  postgres-item:
+    build:
+      context: .
+      dockerfile: postgres-item/postgres-item.Dockerfile
+    environment:
+      POSTGRES_PASSWORD: cqrs-assignment
+    image: cqrs-assignment/postgres-item
+    ports:
+      - "35434:5432"
+
+  # API
+  api-user:
+    build:
+      context: .
+      dockerfile: api-user/api-user.Dockerfile
+    image: cqrs-assignment/api-user
+    ports:
+      - "7001:7001"
+
+  api-alarm:
+    build:
+      context: .
+      dockerfile: api-alarm/api-alarm.Dockerfile
+    image: cqrs-assignment/api-alarm
+    ports:
+      - "6001:6001"
+
+  api-item:
+    build:
+      context: .
+      dockerfile: api-item/api-item.Dockerfile
+    image: cqrs-assignment/api-item
+    ports:
+      - "5001:5001"
+    
+  # kafka manage
+  zookeeper-1:
+    hostname: zookeeper1
+    image: confluentinc/cp-zookeeper:6.2.0
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 12181
+      ZOOKEEPER_DATA_DIR: /zookeeper/data
+    ports:
+      - 12181:12181
+
+  # kafka (CQRS Event message)
+  kafka-1:
+    hostname: kafka1
+    image: confluentinc/cp-kafka:6.2.0
+    depends_on:
+      - zookeeper-1
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:12181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:19092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - 19092:19092
+
+  init-kafka:
+    image: confluentinc/cp-kafka:6.2.0
+    depends_on:
+      - kafka-1
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      sleep 8
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka1:19092 --create --if-not-exists --topic alram --replication-factor 1 --partitions 1
+      kafka-topics --bootstrap-server kafka1:19092 --create --if-not-exists --topic item_history --replication-factor 1 --partitions 1
+      "
+  # kafka-consumer
+  kafka-alram-consumer:
+    build:
+      context: .
+      dockerfile: kafka-alram/kafka-consumer.Dockerfile
+    image: cqrs-kafka/kafka-alram-consumer
+    depends_on:
+      - init-kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      sleep 11
+      python3 -m alarm_consumer
+      "
+  # kafka-consumer
+  kafka-history-consumer:
+    build:
+      context: .
+      dockerfile: kafka-history/kafka-consumer.Dockerfile
+    image: cqrs-kafka/kafka-history-consumer
+    depends_on:
+      - init-kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      sleep 11
+      python3 -m history_consumer
+      "
+
+  # CQRS view(mongo) 
+  mongo-1:
+    build:
+      context: .
+      dockerfile: mongo/mongo.Dockerfile
+    image: mongo:5.0.9
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: cqrs
+      MONGO_INITDB_ROOT_PASSWORD: cqrs-assignment 
+      MONGO_INITDB_DATABASE: cqrs
+    ports:
+      - 27017:27017
